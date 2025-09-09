@@ -89,13 +89,37 @@ export function styleOutputFile(
   // Convert tokens to CSS variable declarations
   const cssVariables = tokensOfType.map((token) => convertedToken(token, mappedTokens, tokenGroups, tokenCollections, colorTokensNeedingRgb)).join("\n")
 
-  // Determine the CSS selector based on whether this is a theme file
-  const selector = themePath 
+  // Determine the CSS selector based on collection configuration or defaults
+  let selector = themePath 
     ? exportConfiguration.themeSelector.replace('{theme}', themePath)
     : exportConfiguration.cssSelector
   
-  // Construct the file content with CSS variables wrapped in selector
-  let content = `${selector} {\n${cssVariables}\n}`
+  // Check if we should use theme-specific selectors
+  // Use theme selectors if enabled (default to true if not explicitly false)
+  if (exportConfiguration.useThemeSelectors !== false && themePath) {
+    // Check if we have theme selectors configured
+    const themeSelectors = exportConfiguration.themeSelectors
+    
+    // If themeSelectors exists and has the current theme, use it
+    if (themeSelectors && typeof themeSelectors === 'object') {
+      const themeSelector = themeSelectors[themePath]
+      if (themeSelector) {
+        selector = themeSelector
+      }
+      // If the theme isn't configured, fall back to the generic theme selector
+      // This allows for graceful handling of new themes
+    }
+  }
+  
+  // Construct the file content based on selector type
+  let content: string
+  if (selector.startsWith('@media')) {
+    // For media queries, nest :root inside
+    content = `${selector} {\n  :root {\n${cssVariables.split('\n').map(line => '  ' + line).join('\n')}\n  }\n}`
+  } else {
+    // For regular selectors, use as-is
+    content = `${selector} {\n${cssVariables}\n}`
+  }
   
   // Optionally add generated file disclaimer
   if (exportConfiguration.showGeneratedFileDisclaimer) {
@@ -163,13 +187,37 @@ function generateCombinedStyleFile(
     .map((token) => convertedToken(token, mappedTokens, tokenGroups, tokenCollections, colorTokensNeedingRgb))
     .join("\n")
 
-  // Determine the CSS selector based on whether this is a theme file
-  const selector = themePath 
+  // Determine the CSS selector based on collection configuration or defaults
+  let selector = themePath 
     ? exportConfiguration.themeSelector.replace('{theme}', themePath)
     : exportConfiguration.cssSelector
   
-  // Construct the file content
-  let content = `${selector} {\n${cssVariables}\n}`
+  // Check if we should use theme-specific selectors
+  // Use theme selectors if enabled (default to true if not explicitly false)
+  if (exportConfiguration.useThemeSelectors !== false && themePath) {
+    // Check if we have theme selectors configured
+    const themeSelectors = exportConfiguration.themeSelectors
+    
+    // If themeSelectors exists and has the current theme, use it
+    if (themeSelectors && typeof themeSelectors === 'object') {
+      const themeSelector = themeSelectors[themePath]
+      if (themeSelector) {
+        selector = themeSelector
+      }
+      // If the theme isn't configured, fall back to the generic theme selector
+      // This allows for graceful handling of new themes
+    }
+  }
+  
+  // Construct the file content based on selector type
+  let content: string
+  if (selector.startsWith('@media')) {
+    // For media queries, nest :root inside
+    content = `${selector} {\n  :root {\n${cssVariables.split('\n').map(line => '  ' + line).join('\n')}\n  }\n}`
+  } else {
+    // For regular selectors, use as-is
+    content = `${selector} {\n${cssVariables}\n}`
+  }
   
   if (exportConfiguration.showGeneratedFileDisclaimer) {
     content = GeneralHelper.addDisclaimer(exportConfiguration.disclaimer, content)

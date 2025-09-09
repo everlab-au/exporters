@@ -509,5 +509,55 @@
         "dependsOn": {
             "useReferences": true
         }
+    },
+    {
+        "key": "useThemeSelectors",
+        "type": "boolean",
+        "default": true,
+        "title": "Use theme-specific selectors",
+        "description": "Enable custom CSS selectors for specific themes (e.g., media queries for breakpoints, classes for themes).",
+        "category": "CSS selectors"
+    },
+    {
+        "key": "themeSelectors",
+        "type": "object",
+        "title": "Theme selectors",
+        "description": "Custom CSS selectors for each theme. Add any theme name as a key with its corresponding selector (e.g., '.dark', '@media (min-width: 768px)'). New themes can be added dynamically as needed.",
+        "category": "CSS selectors",
+        "dependsOn": {
+            "useThemeSelectors": true
+        },
+        "default": {
+            "dark": ".dark",
+            "light": ".light",
+            "l": "@media (min-width: 1200px)",
+            "m": "@media (min-width: 992px)",
+            "s": "@media (min-width: 768px)",
+            "xs": "@media (min-width: 576px)"
+        },
+        "allowedKeys": {
+            "type": "string",
+            "options": [
+                "dark",
+                "light",
+                "l",
+                "m",
+                "s",
+                "xs"
+            ]
+        },
+        "allowedValues": {
+            "type": "string"
+        },
+        "presets": {
+            "default": {
+                "dark": ".dark",
+                "light": ".light",
+                "l": "@media (min-width: 1200px)",
+                "m": "@media (min-width: 992px)",
+                "s": "@media (min-width: 768px)",
+                "xs": "@media (min-width: 576px)"
+            }
+        }
     }
 ]

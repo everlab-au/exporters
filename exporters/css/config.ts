@@ -84,4 +84,8 @@ export type ExporterConfiguration = {
   propertyToWriteNameToIncludesVar: boolean
   /** When enabled, references will include fallback values as raw token values to handle cases when referenced variables are not loaded */
   useFallbackValues: boolean
+  /** When enabled, allows custom selectors per theme */
+  useThemeSelectors: boolean
+  /** Custom selectors for specific themes. Key is theme name, value is CSS selector */
+  themeSelectors: Record<string, string>
 }
