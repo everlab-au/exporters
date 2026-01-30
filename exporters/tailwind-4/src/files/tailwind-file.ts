@@ -7,14 +7,111 @@ import { FileHelper, ThemeHelper, GeneralHelper } from "@supernovaio/export-util
 import { OutputTextFile, Token, TokenGroup, TokenType, TokenTheme } from "@supernovaio/sdk-exporters"
 import { exportConfiguration } from ".."
 import { FileStructure } from "../../config"
-import { convertedToken, isAllowedTokenType, analyzeTokensForOklchUtilities, generateOklchUtilityVariable } from "../content/token"
+import { convertedToken, isAllowedTokenType, analyzeTokensForOklchUtilities, generateOklchUtilityVariable, tokenVariableName } from "../content/token"
 import { generateTypographyClass } from "../content/typography"
 import { DEFAULT_CONFIG_FILE_NAMES } from "../constants/defaults"
 
 /**
+ * Information about a breakpoint theme extracted from its ID
+ */
+interface BreakpointThemeInfo {
+    isBreakpoint: boolean
+    name: string
+    value: string
+}
+
+/**
+ * Information about a palette theme extracted from its ID
+ */
+interface PaletteThemeInfo {
+    isPalette: boolean
+    name: string
+}
+
+/**
+ * Detects if a theme is a breakpoint theme and extracts its information
+ * Theme ID format: breakpoint-<name>-<value_in_pixels> or breakpoint_<name>_<value_in_pixels>
+ * Examples:
+ *   - breakpoint-xs-576 -> { isBreakpoint: true, name: 'xs', value: '36rem' }
+ *   - breakpoint_xs_576 -> { isBreakpoint: true, name: 'xs', value: '36rem' }
+ *
+ * @param themePath - Path/ID of the theme
+ * @returns BreakpointThemeInfo object
+ */
+function parseBreakpointTheme(themePath: string): BreakpointThemeInfo {
+    const lowerThemePath = themePath.toLowerCase()
+    if (!lowerThemePath.startsWith('breakpoint')) {
+        return { isBreakpoint: false, name: '', value: '' }
+    }
+
+    // Parse format: breakpoint-<name>-<value> or breakpoint_<name>_<value>
+    // Try splitting by dash first, then underscore
+    let parts = themePath.split('-')
+    if (parts.length < 3) {
+        parts = themePath.split('_')
+    }
+
+    if (parts.length >= 3 && parts[0].toLowerCase() === 'breakpoint') {
+        const name = parts[1]
+        const valueInPixels = parseInt(parts[2], 10)
+
+        // Check if we got a valid number
+        if (isNaN(valueInPixels)) {
+            return { isBreakpoint: false, name: '', value: '' }
+        }
+
+        // Convert pixels to rem (assuming 16px base)
+        const valueInRem = valueInPixels / 16
+
+        return {
+            isBreakpoint: true,
+            name: name,
+            value: `${valueInRem}rem`
+        }
+    }
+
+    return { isBreakpoint: false, name: '', value: '' }
+}
+
+/**
+ * Detects if a theme is a palette theme and extracts its information
+ * Theme ID format: palette-<name> or palette_<name>
+ * Examples:
+ *   - palette-light -> { isPalette: true, name: 'light' }
+ *   - palette_dark -> { isPalette: true, name: 'dark' }
+ *
+ * @param themePath - Path/ID of the theme
+ * @returns PaletteThemeInfo object
+ */
+function parsePaletteTheme(themePath: string): PaletteThemeInfo {
+    const lowerThemePath = themePath.toLowerCase()
+    if (!lowerThemePath.startsWith('palette')) {
+        return { isPalette: false, name: '' }
+    }
+
+    // Parse format: palette-<name> or palette_<name>
+    // Try splitting by dash first, then underscore
+    let parts = themePath.split('-')
+    if (parts.length < 2) {
+        parts = themePath.split('_')
+    }
+
+    if (parts.length >= 2 && parts[0].toLowerCase() === 'palette') {
+        const name = parts.slice(1).join('-') // Join remaining parts in case name has dashes
+
+        return {
+            isPalette: true,
+            name: name
+        }
+    }
+
+    return { isPalette: false, name: '' }
+}
+
+/**
  * Processes tokens based on theme settings and filters
  * This function filters tokens based on theme settings and ensures only allowed token types are included
- * 
+ *
  * @param tokens - Array of tokens to process
  * @param themePath - Path of the theme (if applicable)
  * @param theme - Theme object (if applicable)
@@ -176,24 +273,28 @@ function generateTypographyContent(tokens: Array<Token>, tokenGroups: Array<Toke
 /**
  * Generates CSS variables for tokens
  * This function creates CSS variable declarations for tokens based on their type
- * 
+ *
  * @param tokens - Array of tokens to process
  * @param mappedTokens - Map of tokens by ID for reference resolution
  * @param tokenGroups - Array of token groups
  * @param colorTokensNeedingOklch - Set of token IDs that need OKLCH utility variables
  * @param type - Specific token type (if applicable)
+ * @param useVariableReferences - If true, generates variable references instead of actual values (for base theme)
+ * @param usePrefixedVariables - If true, generates prefixed variable names (for themes)
  * @returns CSS variable declarations as a string
  */
 function generateCSSVariables(
-    tokens: Array<Token>, 
-    mappedTokens: Map<string, Token>, 
+    tokens: Array<Token>,
+    mappedTokens: Map<string, Token>,
     tokenGroups: Array<TokenGroup>,
     colorTokensNeedingOklch?: Set<string>,
-    type?: TokenType
+    type?: TokenType,
+    useVariableReferences?: boolean,
+    usePrefixedVariables?: boolean
 ): string {
     const indentString = GeneralHelper.indent(exportConfiguration.indent)
     let cssVariables = ''
-    
+
     // Group tokens by type if not already filtered
     const tokensByType = new Map<TokenType, Token[]>()
     if (!type) {
@@ -207,26 +308,75 @@ function generateCSSVariables(
     } else {
         tokensByType.set(type, tokens)
     }
-    
+
     // Generate CSS variables for all token types
     tokensByType.forEach((tokensOfType, tokenType) => {
         // Add section comment for token type
         cssVariables += `\n${indentString}/* ${tokenType} */\n`
-        
+
         // Add debug count information if debug is enabled
         if (exportConfiguration.debug) {
             cssVariables += `${indentString}/* ${tokensOfType.length} ${tokenType} tokens */\n`
         }
-        
+
+        // Sort tokens alphabetically by their variable name before converting
+        const sortedTokens = [...tokensOfType].sort((a, b) => {
+            const nameA = tokenVariableName(a, tokenGroups)
+            const nameB = tokenVariableName(b, tokenGroups)
+            return nameA.localeCompare(nameB)
+        })
+
         // Convert tokens to CSS variable declarations
-        const cssDeclarations = tokensOfType
-            .map((token) => convertedToken(token, mappedTokens, tokenGroups, colorTokensNeedingOklch))
+        const cssDeclarations = sortedTokens
+            .map((token) => {
+                const varName = tokenVariableName(token, tokenGroups)
+
+                if (useVariableReferences) {
+                    // Generate variable reference with fallback to actual value
+                    // In base @theme: --color-primary: var(--ds-color-primary, actualValue);
+                    const prefix = exportConfiguration.themeVariablePrefix ? `${exportConfiguration.themeVariablePrefix}-` : ''
+                    const prefixedVarName = `${prefix}${varName}`
+
+                    // Get the actual value as fallback
+                    const actualValue = convertedToken(token, mappedTokens, tokenGroups, colorTokensNeedingOklch)
+                    if (actualValue) {
+                        // Extract just the value part from the CSS declaration (remove the variable name and semicolon)
+                        const match = actualValue.match(/--[^:]+:\s*(.+);?$/)
+                        if (match) {
+                            const value = match[1].replace(/;$/, '')
+                            return `${indentString}--${varName}: var(--${prefixedVarName}, ${value});`
+                        }
+                    }
+                    return `${indentString}--${varName}: var(--${prefixedVarName});`
+                }
+
+                if (usePrefixedVariables) {
+                    // Generate prefixed variable names for themes
+                    // In themes: --ds-color-primary: value;
+                    const prefix = exportConfiguration.themeVariablePrefix ? `${exportConfiguration.themeVariablePrefix}-` : ''
+                    const prefixedVarName = `${prefix}${varName}`
+
+                    // Get the actual value
+                    const actualValue = convertedToken(token, mappedTokens, tokenGroups, colorTokensNeedingOklch)
+                    if (actualValue) {
+                        // Extract just the value part from the CSS declaration
+                        const match = actualValue.match(/--[^:]+:\s*(.+);?$/)
+                        if (match) {
+                            const value = match[1].replace(/;$/, '')
+                            return `${indentString}--${prefixedVarName}: ${value};`
+                        }
+                    }
+                    return `${indentString}--${prefixedVarName}: ;`
+                }
+
+                return convertedToken(token, mappedTokens, tokenGroups, colorTokensNeedingOklch)
+            })
             .filter((declaration): declaration is string => declaration !== null) // Filter out null returns
             .join("\n")
-        
+
         cssVariables += cssDeclarations + "\n"
     })
-    
+
     return cssVariables
 }
 
@@ -276,7 +426,17 @@ export function styleOutputFile(tokens: Array<Token>, tokenGroups: Array<TokenGr
     // Generate OKLCH utility variables
     let oklchUtilityVariables = ''
     if (colorTokensNeedingOklch.size > 0) {
-        oklchUtilityVariables = Array.from(colorTokensNeedingOklch)
+        // Sort OKLCH tokens alphabetically by their variable name
+        const sortedOklchTokenIds = Array.from(colorTokensNeedingOklch).sort((idA, idB) => {
+            const tokenA = mappedTokens.get(idA)
+            const tokenB = mappedTokens.get(idB)
+            if (!tokenA || !tokenB) return 0
+            const nameA = tokenVariableName(tokenA, tokenGroups)
+            const nameB = tokenVariableName(tokenB, tokenGroups)
+            return nameA.localeCompare(nameB)
+        })
+
+        oklchUtilityVariables = sortedOklchTokenIds
             .map(id => {
                 const token = mappedTokens.get(id)
                 if (token) {
@@ -303,8 +463,12 @@ export function styleOutputFile(tokens: Array<Token>, tokenGroups: Array<TokenGr
         Array.from(new Set(processedTokens.map(t => t.tokenType)))
     )
 
+    // Check if this is a breakpoint or palette theme
+    const breakpointInfo = themePath ? parseBreakpointTheme(themePath) : { isBreakpoint: false, name: '', value: '' }
+    const paletteInfo = themePath ? parsePaletteTheme(themePath) : { isPalette: false, name: '' }
+
     // Use configured selector for base tokens or theme selector for themed tokens
-    const selector = themePath && theme 
+    const selector = themePath && theme
         ? exportConfiguration.themeSelector.replace('{theme}', themePath)
         : exportConfiguration.cssSelector
 
@@ -316,17 +480,56 @@ export function styleOutputFile(tokens: Array<Token>, tokenGroups: Array<TokenGr
     }
     // Prepend OKLCH utility variables
     cssVariables += oklchUtilityVariables
-    cssVariables += generateCSSVariables(processedTokens, mappedTokens, tokenGroups, colorTokensNeedingOklch)
 
-    // Check if any tokens use references and if references are enabled
-    const hasReferences = exportConfiguration.useReferences && processedTokens.some(token => 
-        // @ts-ignore
-        token.value.referencedTokenId && token.value.referencedTokenId !== null && token.value.referencedTokenId !== undefined
-    )
+    // For base files (no theme), use variable references if this is @theme selector
+    // For theme files, use prefixed variables
+    const useVariableReferences = !themePath && selector === '@theme'
+    const usePrefixedVariables = !!themePath
+    cssVariables += generateCSSVariables(processedTokens, mappedTokens, tokenGroups, colorTokensNeedingOklch, undefined, useVariableReferences, usePrefixedVariables)
 
-    // Add inline flag for @theme if it's the base selector and there are references
-    const themeDirective = selector === '@theme' && hasReferences ? '@theme inline' : selector
-    content += `${themeDirective} {\n${cssVariables}}\n`
+    // Handle breakpoint themes
+    if (breakpointInfo.isBreakpoint) {
+        // Add debug comment if enabled
+        if (exportConfiguration.debug) {
+            content += `/* Breakpoint theme detected: ${themePath} -> ${breakpointInfo.name} (${breakpointInfo.value}) */\n`
+        }
+
+        // First, define the breakpoint variable in @theme
+        content += `@theme {\n`
+        content += `${GeneralHelper.indent(exportConfiguration.indent)}--breakpoint-${breakpointInfo.name}: ${breakpointInfo.value};\n`
+        content += `}\n\n`
+
+        // Then wrap themed variables in @media query with @theme
+        content += `@media (min-width: theme(--breakpoint-${breakpointInfo.name})) {\n`
+        content += `${GeneralHelper.indent(exportConfiguration.indent)}@theme {\n`
+
+        // Add indented CSS variables (need to indent twice for nested structure)
+        const doubleIndent = GeneralHelper.indent(exportConfiguration.indent) + GeneralHelper.indent(exportConfiguration.indent)
+        const indentedVariables = cssVariables.split('\n').map(line =>
+            line ? doubleIndent + line.replace(/^\s+/, '') : line
+        ).join('\n')
+        content += indentedVariables
+
+        content += `${GeneralHelper.indent(exportConfiguration.indent)}}\n`
+        content += `}\n`
+    } else if (paletteInfo.isPalette) {
+        // Handle palette themes
+        // Add debug comment if enabled
+        if (exportConfiguration.debug) {
+            content += `/* Palette theme detected: ${themePath} -> ${paletteInfo.name} */\n`
+        }
+
+        // Wrap themed variables in @utility with theme-<name> class
+        content += `@utility theme-${paletteInfo.name} {\n`
+        content += cssVariables
+        content += `}\n`
+    } else {
+        // Standard theme or base file handling
+        // For base files with @theme selector, use @theme inline
+        // since we're using variable references with fallback values
+        const themeDirective = !themePath && selector === '@theme' ? '@theme inline' : selector
+        content += `${themeDirective} {\n${cssVariables}}\n`
+    }
 
     // Add typography classes
     content += generateTypographyContent(processedTokens, tokenGroups)
@@ -377,19 +580,14 @@ export function generateStyleFiles(tokens: Array<Token>, tokenGroups: Array<Toke
         tokensByType.get(type)!.push(token)
     })
 
+    // Check if this is a breakpoint or palette theme
+    const breakpointInfo = themePath ? parseBreakpointTheme(themePath) : { isBreakpoint: false, name: '', value: '' }
+    const paletteInfo = themePath ? parsePaletteTheme(themePath) : { isPalette: false, name: '' }
+
     // Use configured selector for base tokens or theme selector for themed tokens
-    const selector = themePath && theme 
+    const selector = themePath && theme
         ? exportConfiguration.themeSelector.replace('{theme}', themePath)
         : exportConfiguration.cssSelector
-
-    // Check if any tokens use references and if references are enabled
-    const hasReferences = exportConfiguration.useReferences && processedTokens.some(token => 
-        // @ts-ignore
-        token.value.referencedTokenId && token.value.referencedTokenId !== null && token.value.referencedTokenId !== undefined
-    )
-
-    // Add inline flag for @theme if it's the base selector and there are references
-    const themeDirective = selector === '@theme' && hasReferences ? '@theme inline' : selector
 
     // Generate a file for each token type
     return Array.from(tokensByType.entries()).map(([type, tokensOfType]) => {
@@ -401,7 +599,7 @@ export function generateStyleFiles(tokens: Array<Token>, tokenGroups: Array<Toke
         // Start with Tailwind import with prefix if configured, but only for base file
         let content = ''
         if (!themePath) {
-            content = exportConfiguration.globalPrefix 
+            content = exportConfiguration.globalPrefix
                 ? `@import "tailwindcss" prefix(${exportConfiguration.globalPrefix});\n\n`
                 : '@import "tailwindcss";\n\n'
         }
@@ -411,10 +609,55 @@ export function generateStyleFiles(tokens: Array<Token>, tokenGroups: Array<Toke
 
         // Generate CSS variables
         let cssVariables = ''
-        cssVariables += generateCSSVariables(tokensOfType, mappedTokens, tokenGroups, undefined, type)
+        // For base files (no theme), use variable references if this is @theme selector
+        // For theme files, use prefixed variables
+        const useVariableReferences = !themePath && selector === '@theme'
+        const usePrefixedVariables = !!themePath
+        cssVariables += generateCSSVariables(tokensOfType, mappedTokens, tokenGroups, undefined, type, useVariableReferences, usePrefixedVariables)
 
-        // Add the CSS variables to the content
-        content += `${themeDirective} {\n${cssVariables}}\n`
+        // Handle breakpoint themes
+        if (breakpointInfo.isBreakpoint) {
+            // Add debug comment if enabled
+            if (exportConfiguration.debug) {
+                content += `/* Breakpoint theme detected: ${themePath} -> ${breakpointInfo.name} (${breakpointInfo.value}) */\n`
+            }
+
+            // First, define the breakpoint variable in @theme
+            content += `@theme {\n`
+            content += `${GeneralHelper.indent(exportConfiguration.indent)}--breakpoint-${breakpointInfo.name}: ${breakpointInfo.value};\n`
+            content += `}\n\n`
+
+            // Then wrap themed variables in @media query with @theme
+            content += `@media (min-width: theme(--breakpoint-${breakpointInfo.name})) {\n`
+            content += `${GeneralHelper.indent(exportConfiguration.indent)}@theme {\n`
+
+            // Add indented CSS variables (need to indent twice for nested structure)
+            const doubleIndent = GeneralHelper.indent(exportConfiguration.indent) + GeneralHelper.indent(exportConfiguration.indent)
+            const indentedVariables = cssVariables.split('\n').map(line =>
+                line ? doubleIndent + line.replace(/^\s+/, '') : line
+            ).join('\n')
+            content += indentedVariables
+
+            content += `${GeneralHelper.indent(exportConfiguration.indent)}}\n`
+            content += `}\n`
+        } else if (paletteInfo.isPalette) {
+            // Handle palette themes
+            // Add debug comment if enabled
+            if (exportConfiguration.debug) {
+                content += `/* Palette theme detected: ${themePath} -> ${paletteInfo.name} */\n`
+            }
+
+            // Wrap themed variables in @utility with theme-<name> class
+            content += `@utility theme-${paletteInfo.name} {\n`
+            content += cssVariables
+            content += `}\n`
+        } else {
+            // Standard theme or base file handling
+            // For base files with @theme selector, use @theme inline
+            // since we're using variable references with fallback values
+            const themeDirective = !themePath && selector === '@theme' ? '@theme inline' : selector
+            content += `${themeDirective} {\n${cssVariables}}\n`
+        }
 
         // Add typography classes if this is the typography type
         if (type === TokenType.typography) {

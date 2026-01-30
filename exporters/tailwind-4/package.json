@@ -20,7 +20,7 @@
     "devDependencies": {
         "@babel/preset-env": "^7.24.0",
         "@babel/preset-typescript": "^7.23.3",
-        "@supernovaio/sdk-exporters": "2.1.1",
+        "@supernovaio/sdk-exporters": "2.2.53",
         "@types/jest": "^29.5.14",
         "babel-jest": "^29.7.0",
         "jest": "^29.7.0",

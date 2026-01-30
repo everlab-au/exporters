@@ -68,6 +68,8 @@ export type ExporterConfiguration = {
   customizeStyleFileNames: boolean
   /** Prefix for Tailwind classes and CSS variables */
   globalPrefix: string
+  /** Prefix for theme variable references (e.g., 'ds' will generate --ds-color-primary in themes) */
+  themeVariablePrefix: string
   /** When enabled, uses specific prefixes for different color utilities */
   useColorUtilityPrefixes: boolean
   /** Configuration for color utility prefixes and their patterns */

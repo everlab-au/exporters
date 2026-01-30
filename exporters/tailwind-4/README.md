@@ -124,6 +124,54 @@ Here is a list of all the configuration options this exporter provides:
 - **exportOnlyThemedTokens:** When enabled, themed files will only include tokens that have different values from the base theme.
 - **exportBaseValues:** When enabled, base token values will be exported along with themes.
 
+#### Breakpoint Themes
+
+Themes with names or code names starting with `breakpoint` are automatically treated as responsive breakpoints. The format supports both dashes and underscores: `breakpoint-<name>-<value_in_pixels>` or `breakpoint_<name>_<value_in_pixels>`.
+
+**Example:** A theme named "Breakpoint XS 576" (which becomes `breakpoint-xs-576` after normalization) will generate:
+
+```css
+@theme {
+  --breakpoint-xs: 36rem;
+}
+
+@media (min-width: theme(--breakpoint-xs)) {
+  :root {
+    /* Your themed variables here */
+  }
+}
+```
+
+The pixel value is automatically converted to rem units (using base 16px).
+
+**How it works:**
+
+1. In Supernova, create a theme with a name like "Breakpoint XS 576" or use a code name like "breakpoint-xs-576"
+2. The exporter detects the "breakpoint" prefix (case-insensitive)
+3. Extracts the name (e.g., "xs") and pixel value (e.g., 576)
+4. Generates a `@theme` block with the breakpoint variable
+5. Wraps your themed tokens in a `@media` query with `:root` selector
+
+#### Palette Themes
+
+Themes with names or code names starting with `palette` are automatically treated as utility class themes. The format supports both dashes and underscores: `palette-<name>` or `palette_<name>`.
+
+**Example:** A theme named "Palette Light" (which becomes `palette-light` after normalization) will generate:
+
+```css
+@utility theme-light {
+  /* Your themed variables here */
+}
+```
+
+**How it works:**
+
+1. In Supernova, create a theme with a name like "Palette Light" or use a code name like "palette-light"
+2. The exporter detects the "palette" prefix (case-insensitive)
+3. Extracts the name (e.g., "light")
+4. Wraps your themed tokens in a `@utility theme-<name>` block
+5. The utility class can be applied to elements to use the palette (e.g., `class="theme-light"`)
+
 ### Reset Rules
 - **disableAllDefaults:** When enabled, removes all default Tailwind utilities by adding --*: initial; to reset group.
 - **disableAnimateDefaults:** When enabled, resets all animation token values to initial state.
