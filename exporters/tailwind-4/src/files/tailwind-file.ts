@@ -491,23 +491,27 @@ export function styleOutputFile(tokens: Array<Token>, tokenGroups: Array<TokenGr
             content += `/* Breakpoint theme detected: ${themePath} -> ${breakpointInfo.name} (${breakpointInfo.value}) */\n`
         }
 
+        const indent = GeneralHelper.indent(exportConfiguration.indent)
         // First, define the breakpoint variable in @theme
         content += `@theme {\n`
-        content += `${GeneralHelper.indent(exportConfiguration.indent)}--breakpoint-${breakpointInfo.name}: ${breakpointInfo.value};\n`
+        content += `${indent}--breakpoint-${breakpointInfo.name}: ${breakpointInfo.value};\n`
         content += `}\n\n`
 
-        // Then wrap themed variables in @media query with @theme
-        content += `@media (min-width: theme(--breakpoint-${breakpointInfo.name})) {\n`
-        content += `${GeneralHelper.indent(exportConfiguration.indent)}@theme {\n`
+        // Create the wrap required to override the variables for this breakpoint
+        const doubleIndent = GeneralHelper.indent(exportConfiguration.indent * 2)
+        content += `@layer theme {\n`
+        content += `${indent}@media (min-width: theme(--breakpoint-${breakpointInfo.name})) {\n`
+        content += `${doubleIndent}:root {\n`
 
         // Add indented CSS variables (need to indent twice for nested structure)
-        const doubleIndent = GeneralHelper.indent(exportConfiguration.indent) + GeneralHelper.indent(exportConfiguration.indent)
+        const tripleIndent = GeneralHelper.indent(exportConfiguration.indent * 3)
         const indentedVariables = cssVariables.split('\n').map(line =>
-            line ? doubleIndent + line.replace(/^\s+/, '') : line
+            line ? tripleIndent + line.replace(/^\s+/, '') : line
         ).join('\n')
         content += indentedVariables
 
-        content += `${GeneralHelper.indent(exportConfiguration.indent)}}\n`
+        content += `${doubleIndent}}\n`
+        content += `${indent}}\n`
         content += `}\n`
     } else if (paletteInfo.isPalette) {
         // Handle palette themes
