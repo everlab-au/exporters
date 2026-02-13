@@ -417,9 +417,6 @@ export function styleOutputFile(tokens: Array<Token>, tokenGroups: Array<TokenGr
 
     // Process tokens to get only themed ones if needed
     const processedTokens = processTokens(tokens, themePath, theme)
-    if (processedTokens.length === 0) {
-        return null
-    }
 
     // Analyze tokens for OKLCH utility needs
     const colorTokensNeedingOklch = analyzeTokensForOklchUtilities(processedTokens, tokenGroups)
@@ -541,7 +538,7 @@ export function styleOutputFile(tokens: Array<Token>, tokenGroups: Array<TokenGr
 
     // Create and return the output file
     const fileName = themePath ? `tailwind.${themePath}.css` : "tailwind.css"
-
+    
     return FileHelper.createTextFile({
         relativePath: "./",
         fileName: fileName,
