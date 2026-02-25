@@ -108,21 +108,19 @@ function handleTypographyToken(token: Token, mappedTokens: Map<string, Token>, t
     return CSSHelper.tokenToCSS({ ...token, value, tokenType: tokenTypeMap[property] }, mappedTokens, cssOptions)
   }
 
+  const fontWeight = getPropertyCSS('fontWeight')
   const fontSize = getPropertyCSS('fontSize')
   const lineHeight = getPropertyCSS('lineHeight')
   const fontFamily = getPropertyCSS('fontFamily')
-  const fontWeight = getPropertyCSS('fontWeight')
+
+  if (!fontWeight && !fontSize && !lineHeight && !fontFamily) {
+    return ''
+  }
 
   
-  // Build the shorthand: <fontSize> / <lineHeight> <fontFamily> <fontWeight>
-  let shorthand = fontSize || ''
-  if (lineHeight) shorthand += ` / ${lineHeight}`
-  if (fontFamily) shorthand += ` ${fontFamily}`
-  if (fontWeight) shorthand += ` ${fontWeight}`
-  
-  if (shorthand) {
-    output += `${indentString}--${baseName}: ${shorthand};`
-  }
+  // Build the shorthand: <fontWeight> <fontSize> / <lineHeight> <fontFamily> 
+  const shorthand = `${fontWeight} ${fontSize} / ${lineHeight} ${fontFamily}` 
+  output += `${indentString}--${baseName}: ${shorthand};`
 
   return output
 }
