@@ -50,7 +50,11 @@ function generateDebugInfo(token: Token, indentString: string): string {
 }
 
 /**
- * Handles the conversion of a typography token into CSS custom properties
+ * Handles the conversion of a typography token into a single CSS custom property
+ * using the font shorthand format: <fontSize> / <lineHeight> <fontFamily> <fontWeight>
+ *
+ * e.g. --typography-body-100-medium: var(--text-font-size-body-100) / var(--leading-font-line-height-body-100) "Saans" 570;
+ *
  * @param token - The typography token to convert
  * @param mappedTokens - Map of all tokens for resolving references
  * @param tokenGroups - Array of token groups for determining token hierarchy
@@ -59,7 +63,7 @@ function generateDebugInfo(token: Token, indentString: string): string {
 function handleTypographyToken(token: Token, mappedTokens: Map<string, Token>, tokenGroups: Array<TokenGroup>): string {
   const indentString = GeneralHelper.indent(exportConfiguration.indent)
   let output = ""
-  
+
   // Add debug info
   output += generateDebugInfo(token, indentString)
 
@@ -68,52 +72,55 @@ function handleTypographyToken(token: Token, mappedTokens: Map<string, Token>, t
     output += `${indentString}/* ${token.description.trim()} */\n`
   }
 
-  // Get the base name for the typography token
   const baseName = tokenVariableName(token, tokenGroups)
 
-  // Extract individual properties from the typography token
   // @ts-ignore
-  const typographyValue = token.value as TypographyTokenValue
+  let typographyValue = token.value as TypographyTokenValue
 
-  // Helper function to create CSS variable for a typography property
-  const createTypographyProperty = (property: keyof Omit<TypographyTokenValue, 'referencedTokenId'>, suffix: string = '') => {
-    if (typographyValue[property]) {
-      const propertyValue = typographyValue[property] as AnyDimensionTokenValue
-      const value = {
-        ...propertyValue,
-        referencedTokenId: propertyValue.referencedTokenId || null
-      }
-
-      // Map typography properties to their corresponding token types
-      const tokenTypeMap: Record<keyof Omit<TypographyTokenValue, 'referencedTokenId'>, TokenType> = {
-        fontSize: TokenType.fontSize,
-        lineHeight: TokenType.lineHeight,
-        letterSpacing: TokenType.letterSpacing,
-        fontWeight: TokenType.fontWeight,
-        fontFamily: TokenType.fontFamily,
-        textDecoration: TokenType.textDecoration,
-        textCase: TokenType.textCase,
-        paragraphIndent: TokenType.paragraphSpacing,
-        paragraphSpacing: TokenType.paragraphSpacing
-      }
-
-      // @ts-ignore
-      output += `${indentString}--${baseName}${suffix}: ${CSSHelper.tokenToCSS({ ...token, value, tokenType: tokenTypeMap[property] }, mappedTokens, {
-        allowReferences: exportConfiguration.useReferences,
-        decimals: exportConfiguration.colorPrecision,
-        colorFormat: exportConfiguration.colorFormat,
-        forceRemUnit: exportConfiguration.forceRemUnit,
-        remBase: exportConfiguration.remBase,
-        tokenToVariableRef: (t) => `var(--${tokenVariableName(t, tokenGroups)})`
-      })};\n`
-    }
+  const cssOptions = {
+    allowReferences: exportConfiguration.useReferences,
+    decimals: exportConfiguration.colorPrecision,
+    colorFormat: exportConfiguration.colorFormat,
+    forceRemUnit: exportConfiguration.forceRemUnit,
+    remBase: exportConfiguration.remBase,
+    tokenToVariableRef: (t: Token) => `var(--${tokenVariableName(t, tokenGroups)})`
   }
 
-  // Create CSS variables for each typography property
-  createTypographyProperty('fontSize') // Base font size
-  createTypographyProperty('lineHeight', '--line-height')
-  createTypographyProperty('letterSpacing', '--letter-spacing')
-  createTypographyProperty('fontWeight', '--font-weight')
+  // Map of sub-properties to their token types for CSSHelper
+  const tokenTypeMap: Partial<Record<keyof Omit<TypographyTokenValue, 'referencedTokenId'>, TokenType>> = {
+    fontSize: TokenType.fontSize,
+    lineHeight: TokenType.lineHeight,
+    fontFamily: TokenType.fontFamily,
+    fontWeight: TokenType.fontWeight,
+  }
+
+  // Get the CSS value for a typography sub-property
+  const getPropertyCSS = (property: keyof typeof tokenTypeMap): string | null => {
+    const propertyValue = typographyValue[property]
+
+
+    if (!propertyValue) return null
+    const value = {
+      ...(propertyValue as AnyDimensionTokenValue),
+      referencedTokenId: (propertyValue as AnyDimensionTokenValue).referencedTokenId || null
+    }
+    // @ts-ignore
+    return CSSHelper.tokenToCSS({ ...token, value, tokenType: tokenTypeMap[property] }, mappedTokens, cssOptions)
+  }
+
+  const fontWeight = getPropertyCSS('fontWeight')
+  const fontSize = getPropertyCSS('fontSize')
+  const lineHeight = getPropertyCSS('lineHeight')
+  const fontFamily = getPropertyCSS('fontFamily')
+
+  if (!fontWeight && !fontSize && !lineHeight && !fontFamily) {
+    return ''
+  }
+
+  
+  // Build the shorthand: <fontWeight> <fontSize> / <lineHeight> <fontFamily> 
+  const shorthand = `${fontWeight} ${fontSize} / ${lineHeight} ${fontFamily}` 
+  output += `${indentString}--${baseName}: ${shorthand};`
 
   return output
 }
