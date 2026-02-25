@@ -340,6 +340,11 @@ function generateCSSVariables(
                     // Get the actual value as fallback
                     const actualValue = convertedToken(token, mappedTokens, tokenGroups, colorTokensNeedingOklch)
                     if (actualValue) {
+                        if (token.tokenType === TokenType.typography) {
+                            // typography tokens are special and will just use the value directly
+                            return actualValue
+                        }
+                        
                         // Extract just the value part from the CSS declaration (remove the variable name and semicolon)
                         const match = actualValue.match(/--[^:]+:\s*(.+);?$/)
                         if (match) {
