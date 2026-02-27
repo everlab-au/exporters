@@ -163,9 +163,19 @@ Pulsar.export(async (sdk: Supernova, context: PulsarContext): Promise<Array<AnyO
           if (exportConfiguration.fileStructure === FileStructure.SingleFile) {
             const baseFile = styleOutputFile(tokens, tokenGroups)
             if (baseFile) outputFiles.push(baseFile)
+
+            const baseTokenFile = styleOutputFile(tokens, tokenGroups, 'root')
+            if (baseTokenFile) {
+              outputFiles.push(baseTokenFile)
+            }
           } else {
             const baseFiles = generateStyleFiles(tokens, tokenGroups)
             outputFiles = [...outputFiles, ...baseFiles]
+
+              const baseTokenFiles = generateStyleFiles(tokens, tokenGroups, 'root')
+            if (baseTokenFiles) {
+              outputFiles.push(...baseTokenFiles)
+            }
           }
         }
         

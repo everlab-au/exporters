@@ -332,26 +332,11 @@ function generateCSSVariables(
                 const varName = tokenVariableName(token, tokenGroups)
 
                 if (useVariableReferences) {
-                    // Generate variable reference with fallback to actual value
-                    // In base @theme: --color-primary: var(--ds-color-primary, actualValue);
+                    // Generate variable reference, no fallback. 
+                    // We include a root file of all base variables (what the fallback would've been)
+                    // In base @theme: --color-primary: var(--ds-color-primary);
                     const prefix = exportConfiguration.themeVariablePrefix ? `${exportConfiguration.themeVariablePrefix}-` : ''
                     const prefixedVarName = `${prefix}${varName}`
-
-                    // Get the actual value as fallback
-                    const actualValue = convertedToken(token, mappedTokens, tokenGroups, colorTokensNeedingOklch)
-                    if (actualValue) {
-                        if (token.tokenType === TokenType.typography) {
-                            // typography tokens are special and will just use the value directly
-                            return actualValue
-                        }
-                        
-                        // Extract just the value part from the CSS declaration (remove the variable name and semicolon)
-                        const match = actualValue.match(/--[^:]+:\s*(.+);?$/)
-                        if (match) {
-                            const value = match[1].replace(/;$/, '')
-                            return `${indentString}--${varName}: var(--${prefixedVarName}, ${value});`
-                        }
-                    }
                     return `${indentString}--${varName}: var(--${prefixedVarName});`
                 }
 
@@ -780,6 +765,7 @@ export function indexOutputFile(tokens: Array<Token>, themes: Array<TokenTheme |
     if (exportConfiguration.exportBaseValues) {
         if (exportConfiguration.fileStructure === FileStructure.SingleFile) {
             content += `@import "./tailwind.css";\n`
+            content += `@import "./tailwind.root.css";\n`
         } else {
             // Import separate type files from base folder
             const tokenTypes = Array.from(new Set(tokens.map(t => t.tokenType)))
