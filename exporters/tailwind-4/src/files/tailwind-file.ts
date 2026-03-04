@@ -346,8 +346,8 @@ function generateCSSVariables(
                     const prefix = exportConfiguration.themeVariablePrefix ? `${exportConfiguration.themeVariablePrefix}-` : ''
                     const prefixedVarName = `${prefix}${varName}`
 
-                    // Get the actual value
-                    const actualValue = convertedToken(token, mappedTokens, tokenGroups, colorTokensNeedingOklch)
+                    // Get the actual value, passing the prefix so references also use prefixed var names
+                    const actualValue = convertedToken(token, mappedTokens, tokenGroups, colorTokensNeedingOklch, exportConfiguration.themeVariablePrefix)
                     if (actualValue) {
                         // Extract just the value part from the CSS declaration
                         const match = actualValue.match(/--[^:]+:\s*(.+);?$/)
@@ -410,9 +410,10 @@ export function styleOutputFile(tokens: Array<Token>, tokenGroups: Array<TokenGr
 
     // Analyze tokens for OKLCH utility needs
     const colorTokensNeedingOklch = analyzeTokensForOklchUtilities(processedTokens, tokenGroups)
-    // Generate OKLCH utility variables
+    // Generate OKLCH utility variables — prefixed for root/theme files, unprefixed for base @theme file
+    const oklchPrefix = themePath ? exportConfiguration.themeVariablePrefix : undefined
     let oklchUtilityVariables = ''
-    if (colorTokensNeedingOklch.size > 0) {
+    if (themePath && colorTokensNeedingOklch.size > 0) {
         // Sort OKLCH tokens alphabetically by their variable name
         const sortedOklchTokenIds = Array.from(colorTokensNeedingOklch).sort((idA, idB) => {
             const tokenA = mappedTokens.get(idA)
@@ -427,7 +428,7 @@ export function styleOutputFile(tokens: Array<Token>, tokenGroups: Array<TokenGr
             .map(id => {
                 const token = mappedTokens.get(id)
                 if (token) {
-                    return generateOklchUtilityVariable(token, tokenGroups)
+                    return generateOklchUtilityVariable(token, tokenGroups, oklchPrefix)
                 }
                 return ''
             })

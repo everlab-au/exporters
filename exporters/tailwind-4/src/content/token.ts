@@ -60,7 +60,7 @@ function generateDebugInfo(token: Token, indentString: string): string {
  * @param tokenGroups - Array of token groups for determining token hierarchy
  * @returns Formatted CSS custom property string
  */
-function handleTypographyToken(token: Token, mappedTokens: Map<string, Token>, tokenGroups: Array<TokenGroup>): string {
+function handleTypographyToken(token: Token, mappedTokens: Map<string, Token>, tokenGroups: Array<TokenGroup>, refPrefix?: string): string {
   const indentString = GeneralHelper.indent(exportConfiguration.indent)
   let output = ""
 
@@ -83,7 +83,7 @@ function handleTypographyToken(token: Token, mappedTokens: Map<string, Token>, t
     colorFormat: exportConfiguration.colorFormat,
     forceRemUnit: exportConfiguration.forceRemUnit,
     remBase: exportConfiguration.remBase,
-    tokenToVariableRef: (t: Token) => `var(--${tokenVariableName(t, tokenGroups)})`
+    tokenToVariableRef: (t: Token) => `var(--${refPrefix ? `${refPrefix}-` : ''}${tokenVariableName(t, tokenGroups)})`
   }
 
   // Map of sub-properties to their token types for CSSHelper
@@ -134,7 +134,7 @@ function handleTypographyToken(token: Token, mappedTokens: Map<string, Token>, t
  * @param tokenGroups - Array of token groups for determining token hierarchy
  * @returns Formatted CSS custom property string with optional description comment or null if token type is not allowed
  */
-export function convertedToken(token: Token, mappedTokens: Map<string, Token>, tokenGroups: Array<TokenGroup>, colorTokensNeedingOklch?: Set<string>): string | null {
+export function convertedToken(token: Token, mappedTokens: Map<string, Token>, tokenGroups: Array<TokenGroup>, colorTokensNeedingOklch?: Set<string>, refPrefix?: string): string | null {
   // Skip tokens that are not allowed for Tailwind customization
   if (!isAllowedTokenType(token.tokenType)) {
     return null;
@@ -142,7 +142,7 @@ export function convertedToken(token: Token, mappedTokens: Map<string, Token>, t
 
   // Special handling for typography tokens
   if (token.tokenType === TokenType.typography) {
-    return handleTypographyToken(token, mappedTokens, tokenGroups)
+    return handleTypographyToken(token, mappedTokens, tokenGroups, refPrefix)
   }
 
   // Generate the CSS variable name based on token properties and configuration
@@ -170,11 +170,12 @@ export function convertedToken(token: Token, mappedTokens: Map<string, Token>, t
           valueTransformer: undefined
         });
       }
-      // If context requests a channel-based color variable (needsRgb), use the oklch utility variable in this exporter
+      const varRefPrefix = refPrefix ? `${refPrefix}-` : ''
+      // If context requests a channel-based color variable (needsRgb), use the oklch utility variable.
       if (context?.needsRgb && t.tokenType === TokenType.color && colorTokensNeedingOklch?.has(t.id)) {
-        return `var(--oklch-${tokenVariableName(t, tokenGroups)})`
+        return `var(--${varRefPrefix}oklch-${tokenVariableName(t, tokenGroups)})`
       }
-      return `var(--${tokenVariableName(t, tokenGroups)})`
+      return `var(--${varRefPrefix}${tokenVariableName(t, tokenGroups)})`
     },
     // Handle blur values - extract just the dimension
     valueTransformer: (value: string, t: Token) => {
@@ -415,10 +416,12 @@ export function getColorTokenOklchValue(token: Token): string {
  */
 export function generateOklchUtilityVariable(
   token: Token,
-  tokenGroups: Array<TokenGroup>
+  tokenGroups: Array<TokenGroup>,
+  prefix?: string
 ): string {
   const name = tokenVariableName(token, tokenGroups)
-  const oklchName = `oklch-${name}`
+  const varPrefix = prefix ? `${prefix}-` : ''
+  const oklchName = `${varPrefix}oklch-${name}`
   const oklchValue = getColorTokenOklchValue(token)
   const indentString = GeneralHelper.indent(exportConfiguration.indent)
   if (exportConfiguration.showDescriptions && token.description) {
